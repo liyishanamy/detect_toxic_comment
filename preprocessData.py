@@ -36,6 +36,8 @@ from nltk.stem.snowball import SnowballStemmer
 from pyspark.sql.types import ArrayType, StringType, IntegerType, StructType, StructField
 from pyspark.sql.functions import *
 
+
+
 from sklearn.metrics import confusion_matrix
 
 import pyspark
@@ -87,16 +89,22 @@ def preprocessDataWiki(spark, split=True):
 
   mergeCols = udf(lambda toxic, severe_toxic, obscene, threat, insult, identity_hate: checkClean(toxic, severe_toxic, obscene, threat, insult, identity_hate), IntegerType())
   train = train.withColumn("clean", mergeCols(train["toxic"], train["severe_toxic"], train["obscene"], train["threat"], train["insult"], train["identity_hate"]))
+  # train = train.filter("comment_text != ''")
+
+  train = train.filter(col("comment_text") != "")
 
   if split == True:
     training_spark_df_binary, testing_spark_df_binary = train.randomSplit([0.8, 0.2], seed = 2018)
     training_spark_df_binary.write.format("csv").save("data/preprocessed/preprocessedDataWikiTrain", header="true")
     testing_spark_df_binary.write.format("csv").save("data/preprocessed/preprocessedDataWikiTest", header="true")
+
+    return training_spark_df_binary, testing_spark_df_binary
   else:
-    train.write.format("csv").save("data/preprocessed/precessedDataWiki", header="true")
+    # train.write.format("csv").save("data/preprocessed/precessedDataWiki", header="true")
+    return train
 
 
-def preprocessDataOther(spark):
+def preprocessDataLDT(spark):
   ldt = spark.read.csv(TEST_DATA_FILE, header='true', multiLine=True, escape="\"")
 
   ldt = ldt.withColumn("count", ldt["count"].cast(IntegerType()))
@@ -124,7 +132,9 @@ def preprocessDataOther(spark):
   stemmer_udf = udf(lambda line: stemming(line), StringType())
   ldt = ldt.withColumn("comment_text", stemmer_udf("comment_text"))
 
-  ldt.write.format("csv").save("data/preprocessed/preprocessDataOther", header="true")
+  ldt = ldt.filter(col("comment_text") != "")
+
+  ldt.write.format("csv").save("data/preprocessed/preprocessedDataLDT", header="true")
 
 
 if __name__ == '__main__':
@@ -132,6 +142,6 @@ if __name__ == '__main__':
   spark = SparkSession(sc)
 
   preprocessDataWiki(spark)
-  preprocessDataOther(spark)
+  preprocessDataLDT(spark)
 
 
