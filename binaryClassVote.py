@@ -1,3 +1,13 @@
+import numpy as np
+from pyspark.ml.classification import DecisionTreeClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.feature import StringIndexer, VectorIndexer
+from pyspark.ml.classification import DecisionTreeClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.feature import StringIndexer, VectorIndexer
+from pyspark.mllib.tree import GradientBoostedTrees
+from pyspark.ml.classification import GBTClassifier
+
 import os
 import re
 import pandas as pd
@@ -11,14 +21,10 @@ from pyspark.sql import SQLContext
 from pyspark.context import SparkContext
 from pyspark.sql.session import SparkSession
 
-from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import Tokenizer, HashingTF, IDF
-from pyspark.ml.linalg import Vector
-from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import HashingTF,StopWordsRemover,IDF,Tokenizer
-from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score
 from sklearn.multiclass import OneVsRestClassifier
@@ -26,9 +32,8 @@ from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 from pyspark.mllib.evaluation import BinaryClassificationMetrics
-from sklearn.metrics import confusion_matrix
-from pyspark.ml.classification import LinearSVC
-
+from pyspark.ml.classification import NaiveBayes
+from pyspark.ml.classification import GBTClassifier
 
 # import modules for feature transformation
 from pyspark.ml.linalg import Vector
@@ -37,11 +42,14 @@ from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import RegexTokenizer
+from pyspark.ml.classification import DecisionTreeClassifier
 #Tokenize into words
 
 from nltk.stem.snowball import SnowballStemmer
 from pyspark.sql.types import ArrayType, StringType, IntegerType, StructType, StructField
 from pyspark.sql.functions import *
+
+from sklearn.metrics import confusion_matrix
 
 # Check the pyspark version
 import pyspark
@@ -52,7 +60,6 @@ os.environ["SPARK_HOME"] = "venv/lib/python3.6/site-packages/pyspark"
 
 TRAIN_FILE = "data/train.csv"
 TEST_DATA_FILE = "data/labeled_data_toxic.csv"
-# TEST_LABEL = "/content/drive/MyDrive/CS651Final/jigsaw-toxic-comment-classification-challenge/test_labels.csv"
 
 customSchema = StructType([
   StructField("id", StringType(), True),
@@ -78,10 +85,6 @@ ldt = ldt.withColumn("offensive_language", ldt["offensive_language"].cast(Intege
 ldt = ldt.withColumn("neither", ldt["neither"].cast(IntegerType()))
 ldt = ldt.withColumn("class", ldt["class"].cast(IntegerType()))
 
-train.na.drop()
-
-train = train.withColumn("comment_text", regexp_replace(col("comment_text"), "[\n\r\W]", " "))
-train = train.withColumn("comment_text", regexp_replace(col("comment_text"), r'\d+', ""))
 
 ldt = ldt.withColumn("tweet", regexp_replace(col("tweet"), "[\n\r\W]", " "))
 ldt = ldt.withColumn("tweet", regexp_replace(col("tweet"), r'\d+', ""))
@@ -111,10 +114,14 @@ def stemming(sentence):
     stemSentence = stemSentence.strip()
     return stemSentence
 
-from pyspark.sql.types import ArrayType, StringType
-
 # Stem text
 stemmer_udf = udf(lambda line: stemming(line), StringType())
+
+
+train.na.drop()
+train = train.withColumn("comment_text", regexp_replace(col("comment_text"), "[\n\r\W]", " "))
+train = train.withColumn("comment_text", regexp_replace(col("comment_text"), r'\d+', ""))
+
 train = train.withColumn("comment_text", stemmer_udf("comment_text"))
 
 def check_clean(toxic, severe_toxic, obscene, threat, insult, identity_hate):
@@ -123,77 +130,61 @@ def check_clean(toxic, severe_toxic, obscene, threat, insult, identity_hate):
     else:
         return 1
 
-from pyspark.sql.types import IntegerType
-
 mergeCols = udf(lambda toxic, severe_toxic, obscene, threat, insult, identity_hate: check_clean(toxic, severe_toxic, obscene, threat, insult, identity_hate), IntegerType())
 
 train = train.withColumn("clean", mergeCols(train["toxic"], train["severe_toxic"], train["obscene"], train["threat"], train["insult"], train["identity_hate"]))
-
-tokenizer = Tokenizer().setInputCol("comment_text").setOutputCol("words")
-#Remove stopwords
-remover= StopWordsRemover().setInputCol("words").setOutputCol("filtered").setCaseSensitive(False)
-# ngram = NGram().setN(2).setInputCol("filtered").setOutputCol("ngrams")
-#For each sentence (bag of words),use HashingTF to hash the sentence into a feature vector. 
-hashingTF = HashingTF().setNumFeatures(1000).setInputCol("filtered").setOutputCol("rawFeatures")
-#Create TF_IDF features
-idf = IDF().setInputCol("rawFeatures").setOutputCol("features").setMinDocFreq(0)
-# Create a Logistic regression model
-lr = LinearSVC(labelCol="label", featuresCol="features", maxIter=20)
-# Streamline all above steps into a pipeline
-pipeline=Pipeline(stages=[tokenizer,remover,hashingTF,idf, lr])
-
 train = train.drop('toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate')
 train = train.withColumnRenamed("clean", "label")
 
-training_spark_df_binary, testing_spark_df_binary = train.randomSplit([0.8, 0.2], seed = 2018)
 
-paramGrid = ParamGridBuilder()\
-    .addGrid(hashingTF.numFeatures,[1000]) \
-    .addGrid(lr.regParam, [0.1]) \
-    .build()
-
-crossval = TrainValidationSplit(estimator=pipeline,
-                            estimatorParamMaps=paramGrid,
-                            evaluator=BinaryClassificationEvaluator().setMetricName('areaUnderPR'), # set area Under precision-recall curve as the evaluation metric
-                            # 80% of the data will be used for training, 20% for validation.
-                            trainRatio=0.8)
-
-cvModel = crossval.fit(training_spark_df_binary)
-
-cvModel.bestModel.write().overwrite().save("LinearSVMModel")
+finalPrediction_lr= {}
+finalPrediction_dt={}
+finalPrediction_boostedTree ={}
 
 # read pickled model via pipeline api
-from pyspark.ml.pipeline import PipelineModel
-persistedModel = PipelineModel.load("LinearSVMModel")
-
-train_prediction = persistedModel.transform(training_spark_df_binary)
-test_prediction = persistedModel.transform(testing_spark_df_binary)
-otherDatasetTest = persistedModel.transform(ldt)
-
-pd_prediction = test_prediction.select("*").toPandas()
-actual = pd_prediction["label"].tolist()
-pred = pd_prediction["prediction"].tolist()
-
+boostModel = PipelineModel.load("BoostTreeModel")
+otherDatasetTest = boostModel.transform(ldt)
 pd_prediction_other_dataset = otherDatasetTest.select("*").toPandas()
 actual_otherdataset = pd_prediction_other_dataset["label"].tolist()
-pred_otherdataset = pd_prediction_other_dataset["prediction"].tolist()
+pred_otherdataset_boost = pd_prediction_other_dataset["prediction"].tolist()
 
-tn, fp, fn, tp = confusion_matrix(actual, pred).ravel()
-print(confusion_matrix(actual, pred))
-print("true positive rate",tp / (tp + fp))
-print("true negative rate",tn / (tn + fp))
 
-# compute the accuracy score on training data
-correct_train = train_prediction.filter(train_prediction.label == train_prediction.prediction).count()  
-accuracy_train = correct_train/train_prediction.count() # store the training accuracy score
-print('Training set accuracy {:.2%} data items: {}, correct: {}'.format(accuracy_train,train_prediction.count(), correct_train))
-    
+# read pickled model via pipeline api
+svmModel = PipelineModel.load("LinearSVMModel")
+otherDatasetTest = svmModel.transform(ldt)
+pd_prediction_other_dataset = otherDatasetTest.select("*").toPandas()
+actual_otherdataset = pd_prediction_other_dataset["label"].tolist()
+pred_otherdataset_svm = pd_prediction_other_dataset["prediction"].tolist()
+
+
+# read pickled model via pipeline api
+lrModel = PipelineModel.load("LogisticRegressionModel")
+otherDatasetTest = lrModel.transform(ldt)
+pd_prediction_other_dataset = otherDatasetTest.select("*").toPandas()
+actual_otherdataset = pd_prediction_other_dataset["label"].tolist()
+pred_otherdataset_lr = pd_prediction_other_dataset["prediction"].tolist()
+
+
+label = ldt.select("label").rdd.flatMap(lambda x: x).collect()
+
+#Voting:
+votingPred =[]
+for i in range(len(pred_otherdataset_lr)):
+  sumRound = pred_otherdataset_lr[i] + pred_otherdataset_svm[i] + pred_otherdataset_boost[i]
+  if(sumRound>=2):
+    votingPred.append(1)
+  else:
+    votingPred.append(0)
+  
+tn, fp, fn, tp = confusion_matrix(label, votingPred).ravel()
+print(confusion_matrix(label, votingPred))
+print("voting precision",tp / (tp + fp))
+print("voting recall",tp / (tp + fn))
+correct_test=0
+for i in range(len(votingPred)):
+  if(votingPred[i]==label[i]):
+    correct_test+=1
 # Caculate the accuracy score for the best model 
-correct_test = test_prediction.filter(test_prediction.label == test_prediction.prediction).count()  
-accuracy_test = correct_test/test_prediction.count()
-print('Testing set accuracy {:.2%} data items: {}, correct: {}'.format(accuracy_test, test_prediction.count(), correct_test))
-    
-# Caculate the accuracy score for the best model 
-correct_test_otherDataset = otherDatasetTest.filter(otherDatasetTest.label == otherDatasetTest.prediction).count()  
-accuracy_test_otherDataset = correct_test_otherDataset/otherDatasetTest.count()
-print('Testing set accuracy for other dataset is  {:.2%} data items: {}, correct: {}'.format(accuracy_test_otherDataset, otherDatasetTest.count(), correct_test_otherDataset))
+accuracy_test = correct_test/len(votingPred)
+print('Majority voting Testing set accuracy {:.2%} data items: {}, correct: {}'.format(accuracy_test, len(votingPred), correct_test))
+      

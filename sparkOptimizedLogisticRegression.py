@@ -11,14 +11,10 @@ from pyspark.sql import SQLContext
 from pyspark.context import SparkContext
 from pyspark.sql.session import SparkSession
 
-from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import Tokenizer, HashingTF, IDF
-from pyspark.ml.linalg import Vector
-from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import HashingTF,StopWordsRemover,IDF,Tokenizer
-from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score
 from sklearn.multiclass import OneVsRestClassifier
@@ -26,8 +22,7 @@ from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 from pyspark.mllib.evaluation import BinaryClassificationMetrics
-from sklearn.metrics import confusion_matrix
-from pyspark.ml.classification import LinearSVC
+from pyspark.ml.classification import NaiveBayes
 
 
 # import modules for feature transformation
@@ -42,6 +37,8 @@ from pyspark.ml.feature import RegexTokenizer
 from nltk.stem.snowball import SnowballStemmer
 from pyspark.sql.types import ArrayType, StringType, IntegerType, StructType, StructField
 from pyspark.sql.functions import *
+
+from sklearn.metrics import confusion_matrix
 
 # Check the pyspark version
 import pyspark
@@ -138,7 +135,7 @@ hashingTF = HashingTF().setNumFeatures(1000).setInputCol("filtered").setOutputCo
 #Create TF_IDF features
 idf = IDF().setInputCol("rawFeatures").setOutputCol("features").setMinDocFreq(0)
 # Create a Logistic regression model
-lr = LinearSVC(labelCol="label", featuresCol="features", maxIter=20)
+lr = LogisticRegression(labelCol="label", featuresCol="features", maxIter=10)
 # Streamline all above steps into a pipeline
 pipeline=Pipeline(stages=[tokenizer,remover,hashingTF,idf, lr])
 
@@ -148,8 +145,9 @@ train = train.withColumnRenamed("clean", "label")
 training_spark_df_binary, testing_spark_df_binary = train.randomSplit([0.8, 0.2], seed = 2018)
 
 paramGrid = ParamGridBuilder()\
-    .addGrid(hashingTF.numFeatures,[1000]) \
-    .addGrid(lr.regParam, [0.1]) \
+    .addGrid(hashingTF.numFeatures,[1000])\
+    .addGrid(lr.regParam, [0.1])\
+    .addGrid(lr.elasticNetParam, [0.3])\
     .build()
 
 crossval = TrainValidationSplit(estimator=pipeline,
@@ -160,11 +158,11 @@ crossval = TrainValidationSplit(estimator=pipeline,
 
 cvModel = crossval.fit(training_spark_df_binary)
 
-cvModel.bestModel.write().overwrite().save("LinearSVMModel")
+cvModel.bestModel.write().overwrite().save("LogisticRegressionModel")
 
 # read pickled model via pipeline api
 from pyspark.ml.pipeline import PipelineModel
-persistedModel = PipelineModel.load("LinearSVMModel")
+persistedModel = PipelineModel.load("LogisticRegressionModel")
 
 train_prediction = persistedModel.transform(training_spark_df_binary)
 test_prediction = persistedModel.transform(testing_spark_df_binary)
