@@ -19,8 +19,8 @@ def trainLinearSVCModel(data):
   pipeline=Pipeline(stages=[tokenizer, remover, hashingTF, idf, lr])
 
   paramGrid = ParamGridBuilder()\
-      .addGrid(hashingTF.numFeatures,[1000]) \
-      .addGrid(lr.regParam, [0.1]) \
+      .addGrid(hashingTF.numFeatures,[200, 500, 1000, 5000]) \
+      .addGrid(lr.regParam, [0.01, 0.05, 0.1]) \
       .build()
 
   crossval = TrainValidationSplit(estimator=pipeline,
@@ -45,9 +45,9 @@ def trainLogisticRegressionModel(data):
   pipeline=Pipeline(stages=[tokenizer, remover, hashingTF, idf, lr])
 
   paramGrid = ParamGridBuilder()\
-    .addGrid(hashingTF.numFeatures,[1000])\
-    .addGrid(lr.regParam, [0.1])\
-    .addGrid(lr.elasticNetParam, [0.3])\
+    .addGrid(hashingTF.numFeatures,[200, 500, 800, 2000])\
+    .addGrid(lr.regParam, [0.01, 0.05, 0.1])\
+    .addGrid(lr.elasticNetParam, [0.0,0.3,0.6,0.8])\
     .build()
 
   crossval = TrainValidationSplit(estimator=pipeline,
@@ -72,8 +72,8 @@ def trainNaiveBayesModel(data):
   pipeline=Pipeline(stages=[tokenizer, remover, hashingTF, idf, nb])
 
   paramGrid = ParamGridBuilder()\
-    .addGrid(hashingTF.numFeatures,[1000]) \
-    .addGrid(nb.smoothing, [1]) \
+    .addGrid(hashingTF.numFeatures,[200, 500, 1000, 5000]) \
+    .addGrid(nb.smoothing, [0.5, 1, 1.5, 2]) \
     .build()
 
   crossval = TrainValidationSplit(estimator=pipeline,
@@ -112,8 +112,8 @@ def trainBinaryTreeModel(data):
   pipeline=Pipeline(stages=[tokenizer, remover, hashingTF, idf, dt])
 
   paramGrid = ParamGridBuilder()\
-            .addGrid(dt.maxDepth, [2]) \
-            .addGrid(dt.maxBins, [10]) \
+            .addGrid(dt.maxDepth, [2, 5, 10, 20, 30]) \
+            .addGrid(dt.maxBins, [10, 50, 80]) \
             .build()
 
   crossval = TrainValidationSplit(estimator=pipeline,

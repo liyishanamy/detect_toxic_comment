@@ -45,6 +45,7 @@ print(pyspark.__version__)
 
 os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-8-openjdk-amd64/jre"
 os.environ["SPARK_HOME"] = "venv/lib/python3.6/site-packages/pyspark"
+# os.environ["PYSPARK_PYTHON"]="venv/lib/python3.6"
 
 TRAIN_FILE = "data/train.csv"
 TEST_DATA_FILE = "data/labeled_data_toxic.csv"

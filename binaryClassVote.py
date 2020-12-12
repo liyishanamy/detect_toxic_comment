@@ -36,7 +36,7 @@ os.environ["SPARK_HOME"] = "venv/lib/python3.6/site-packages/pyspark"
 
 def evaluate(model, data):
     # read pickled model via pipeline api
-    persistedModel = PipelineModel.load(model)
+    persistedModel = PipelineModel.load("models/binary/"+model)
 
     transformedData = persistedModel.transform(data)
     pandasTransformedData = transformedData.select("*").toPandas()
@@ -53,12 +53,12 @@ if __name__ == '__main__':
 
     training_spark_df_binary, testing_spark_df_binary, ldt = binaryData(spark)
 
-    models = ["LinearSVMModel", "LogisticRegressionModel", "NaiveBayesModel", "BoostTreeModel", "BinaryTreeModel"]
+    models = ["LinearSVCModel", "LogisticRegressionModel", "NaiveBayesModel", "BoostTreeModel", "BinaryTreeModel"]
 
     preds = []
     actual = []
     for model in models:
-        a, p = evaluate(model, ldt)
+        a, p = evaluate(model, testing_spark_df_binary)
         preds.append(p)
         actual = a
     
