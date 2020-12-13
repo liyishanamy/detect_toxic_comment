@@ -37,7 +37,6 @@ from pyspark.sql.types import ArrayType, StringType, IntegerType, StructType, St
 from pyspark.sql.functions import *
 
 
-
 from sklearn.metrics import confusion_matrix
 
 import pyspark
@@ -88,9 +87,19 @@ def preprocessDataWiki(spark, split=True):
       else:
           return 1
 
+
+  def checkHateSpeech(severe_toxic, threat, identity_hate):
+    if (severe_toxic + threat + identity_hate) > 0:
+      return 1
+    else:
+      return 0
+
+
   mergeCols = udf(lambda toxic, severe_toxic, obscene, threat, insult, identity_hate: checkClean(toxic, severe_toxic, obscene, threat, insult, identity_hate), IntegerType())
   train = train.withColumn("clean", mergeCols(train["toxic"], train["severe_toxic"], train["obscene"], train["threat"], train["insult"], train["identity_hate"]))
-  # train = train.filter("comment_text != ''")
+
+  createHateSpeech = udf(lambda severe_toxic, threat, identity_hate: checkHateSpeech(severe_toxic, threat, identity_hate), IntegerType())
+  train = train.withColumn("hate_speech", createHateSpeech(train["severe_toxic"], train["threat"], train["identity_hate"]))
 
   train = train.filter(col("comment_text") != "")
 

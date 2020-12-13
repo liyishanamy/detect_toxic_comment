@@ -1,12 +1,13 @@
 import os
 import re
+import gc
 import pyspark
 import pandas as pd
 import numpy as np
 
 from pyspark.context import SparkContext
-
 from pyspark.sql.session import SparkSession
+
 from pyspark.sql.types import ArrayType, StringType, IntegerType, StructType, StructField
 from pyspark.sql.functions import *
 
@@ -27,7 +28,6 @@ from sklearn.metrics import confusion_matrix
 
 from classificationModels import trainLinearSVCModel, trainLogisticRegressionModel, trainNaiveBayesModel, trainGradientBoostModel, trainBinaryTreeModel
 
-print(pyspark.__version__)
 
 os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-8-openjdk-amd64/jre"
 os.environ["SPARK_HOME"] = "venv/lib/python3.6/site-packages/pyspark"
@@ -45,7 +45,8 @@ customSchema = StructType([
   StructField("threat", IntegerType(), True),
   StructField("insult", IntegerType(), True),
   StructField("identity_hate", IntegerType(), True),
-  StructField("clean", IntegerType(), True)]
+  StructField("clean", IntegerType(), True),
+  StructField("hate_speech", IntegerType(), True)]
 )
 
 customSchema2 = StructType([
@@ -69,17 +70,35 @@ def binaryData(spark):
   training_spark_df_binary = spark.read.csv(TRAIN_FILE, header='true', schema=customSchema)
 
   training_spark_df_binary = training_spark_df_binary.withColumnRenamed("clean", "label")
-  training_spark_df_binary = training_spark_df_binary.drop('toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate')
+  training_spark_df_binary = training_spark_df_binary.drop('toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate', 'hate_speech')
 
-  testing_spark_df_binary = spark.read.csv(TEST_FILE, header='true', multiLine=True, escape="\"", schema=customSchema)
+  #  testing_spark_df_binary = spark.read.csv(TEST_FILE, header='true', multiLine=True, escape="\"", schema=customSchema)
+  testing_spark_df_binary = spark.read.csv(TEST_FILE, header='true', schema=customSchema)
 
   testing_spark_df_binary = testing_spark_df_binary.withColumnRenamed("clean", "label")
-  testing_spark_df_binary = testing_spark_df_binary.drop('toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate')
+  testing_spark_df_binary = testing_spark_df_binary.drop('toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate', 'hate_speech')
 
   ldt = spark.read.csv(OTHER_DATA_FILE, header='true', schema=customSchema2)
   ldt = ldt.drop("count", "hate_speech", "offensive_language", "neither", "class")
 
   return training_spark_df_binary, testing_spark_df_binary, ldt
+
+
+
+def multiData(spark, col):
+  training_spark_df_binary = spark.read.csv(TRAIN_FILE, header='true', schema=customSchema)
+  training_spark_df_binary = training_spark_df_binary.withColumnRenamed(col, "label")
+  training_spark_df_binary = training_spark_df_binary.select([c for c in training_spark_df_binary.columns if c in {'comment_text', 'label'}])
+  
+  testing_spark_df_binary = spark.read.csv(TEST_FILE, header='true', schema=customSchema)
+  testing_spark_df_binary.show()
+
+  testing_spark_df_binary = testing_spark_df_binary.withColumnRenamed(col, "label")
+  testing_spark_df_binary = testing_spark_df_binary.select([c for c in testing_spark_df_binary.columns if c in {'comment_text', 'label'}])
+  testing_spark_df_binary.show()
+
+  return training_spark_df_binary, testing_spark_df_binary
+
 
 
 def evaluateModel(model, data1, data2, data3):
@@ -116,6 +135,7 @@ def evaluateModel(model, data1, data2, data3):
   correct_test_otherDataset = otherDatasetTest.filter(otherDatasetTest.label == otherDatasetTest.prediction).count()  
   accuracy_test_otherDataset = correct_test_otherDataset/otherDatasetTest.count()
   print('Testing set accuracy for other dataset is  {:.2%} data items: {}, correct: {}'.format(accuracy_test_otherDataset, otherDatasetTest.count(), correct_test_otherDataset))
+
 
 
 if __name__ == '__main__':

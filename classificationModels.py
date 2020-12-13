@@ -10,7 +10,7 @@ from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit, CrossValid
 from pyspark.ml.classification import LinearSVC, LogisticRegression, NaiveBayes, GBTClassifier, DecisionTreeClassifier
 
 
-def trainLinearSVCModel(data): 
+def trainLinearSVCModel(data, directory=""): 
   tokenizer = Tokenizer().setInputCol("comment_text").setOutputCol("words")
   remover= StopWordsRemover().setInputCol("words").setOutputCol("filtered").setCaseSensitive(False)
   hashingTF = HashingTF().setNumFeatures(1000).setInputCol("filtered").setOutputCol("rawFeatures")
@@ -30,13 +30,13 @@ def trainLinearSVCModel(data):
                               trainRatio=0.8)
 
   cvModel = crossval.fit(data)
-  modelName = "LinearSVCModel"
+  modelName = directory + "LinearSVCModel"
   cvModel.bestModel.write().overwrite().save(modelName)
 
   return modelName
 
 
-def trainLogisticRegressionModel(data):
+def trainLogisticRegressionModel(data, directory=""):
   tokenizer = Tokenizer().setInputCol("comment_text").setOutputCol("words")
   remover= StopWordsRemover().setInputCol("words").setOutputCol("filtered").setCaseSensitive(False)
   hashingTF = HashingTF().setNumFeatures(1000).setInputCol("filtered").setOutputCol("rawFeatures")
@@ -57,13 +57,14 @@ def trainLogisticRegressionModel(data):
                             trainRatio=0.8)
 
   cvModel = crossval.fit(data)
-  modelName = "LogisticRegressionModel"
+  modelName = directory + "LogisticRegressionModel"
   cvModel.bestModel.write().overwrite().save(modelName)
+
 
   return modelName
 
 
-def trainNaiveBayesModel(data):
+def trainNaiveBayesModel(data, directory=""):
   tokenizer = Tokenizer().setInputCol("comment_text").setOutputCol("words")
   remover= StopWordsRemover().setInputCol("words").setOutputCol("filtered").setCaseSensitive(False)
   hashingTF = HashingTF().setNumFeatures(1000).setInputCol("filtered").setOutputCol("rawFeatures")
@@ -83,13 +84,14 @@ def trainNaiveBayesModel(data):
                             trainRatio=0.8)
 
   cvModel = crossval.fit(data)
-  modelName = "NaiveBayesModel"
+  modelName = directory + "NaiveBayesModel"
   cvModel.bestModel.write().overwrite().save(modelName)
+
 
   return modelName
 
 
-def trainGradientBoostModel(data): 
+def trainGradientBoostModel(data, directory=""): 
   tokenizer = Tokenizer().setInputCol("comment_text").setOutputCol("words")
   remover= StopWordsRemover().setInputCol("words").setOutputCol("filtered").setCaseSensitive(False)
   hashingTF = HashingTF().setNumFeatures(1000).setInputCol("filtered").setOutputCol("rawFeatures")
@@ -98,12 +100,13 @@ def trainGradientBoostModel(data):
   pipeline=Pipeline(stages=[tokenizer, remover, hashingTF, idf, gbt])
 
   cvModel = pipeline.fit(data)
-  modelName = "BoostTreeModel"
+  modelName = directory + "BoostTreeModel"
   cvModel.write().overwrite().save(modelName)
+
   return modelName
 
 
-def trainBinaryTreeModel(data):
+def trainBinaryTreeModel(data, directory=""):
   tokenizer = Tokenizer().setInputCol("comment_text").setOutputCol("words")
   remover= StopWordsRemover().setInputCol("words").setOutputCol("filtered").setCaseSensitive(False)
   hashingTF = HashingTF().setNumFeatures(1000).setInputCol("filtered").setOutputCol("rawFeatures")
@@ -123,8 +126,9 @@ def trainBinaryTreeModel(data):
                             trainRatio=0.8)
 
   cvModel = crossval.fit(data)
-  modelName = "BinaryTreeModel"
+  modelName = directory + "BinaryTreeModel"
   cvModel.bestModel.write().overwrite().save(modelName)
+
 
   return modelName
 
