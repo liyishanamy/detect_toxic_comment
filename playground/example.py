@@ -20,3 +20,13 @@ def stemming(sentence):
 
 stemmer_udf = udf(lambda line: stemming(line), StringType())
 train = train.withColumn("comment_text", stemmer_udf("comment_text"))
+
+
+tokenizer = Tokenizer()...
+remover = StopWordsRemover()...
+ngram = NGram(n=2).setInputCol(...).setOutputCol(...)
+countVectorizer = CountVectorizer.setInputCol(...).setOutputCol(...)
+idf=IDF()...
+lr = LinearSVC(labelCol="label",featuresCol="features",...)
+pipeline = Pipeline(stages=[tokenizer, remover, ngram, countVectorizer, idf, lr])
+
